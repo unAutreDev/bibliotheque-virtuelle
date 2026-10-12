@@ -63,7 +63,7 @@ export function Library() {
             <button
               key={t}
               onClick={() => setType(t)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm ${type === t ? 'bg-accent text-white' : 'bg-white text-stone-700 ring-1 ring-stone-300'}`}
+              className={`shrink-0 rounded-full border px-3 py-1 text-sm ${type === t ? 'border-accent bg-accent text-white' : 'border-stone-300 bg-white text-stone-700'}`}
             >
               {t === 'tous' ? 'Tous' : TYPE_LABELS[t]}
             </button>
@@ -71,7 +71,7 @@ export function Library() {
           <span className="flex-1" />
           <button
             onClick={() => changeView(view === 'grille' ? 'liste' : 'grille')}
-            className="shrink-0 rounded-full bg-white px-3 py-1 text-sm ring-1 ring-stone-300"
+            className="shrink-0 rounded-full border border-stone-300 bg-white px-3 py-1 text-sm"
             aria-label={view === 'grille' ? 'Afficher en liste' : 'Afficher en grille'}
           >
             {view === 'grille' ? '☰ Liste' : '▦ Grille'}
