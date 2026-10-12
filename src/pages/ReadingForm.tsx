@@ -3,6 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
+import { OnlineSearch } from '../components/OnlineSearch'
 import { StarRating } from '../components/StarRating'
 import {
   addReading,
@@ -15,6 +16,7 @@ import {
   type ReadingStatus,
   type ReadingType,
 } from '../lib/db'
+import { findCover, resultToDraft, type BookResult } from '../lib/bookSearch'
 
 const EMPTY: ReadingDraft = { type: 'livre', title: '', authors: [], status: 'a_lire' }
 
@@ -42,8 +44,25 @@ function ReadingForm({ existing }: { existing?: Reading }) {
   const [draft, setDraft] = useState<ReadingDraft>(existing ?? EMPTY)
   const [authorsText, setAuthorsText] = useState(existing?.authors.join(', ') ?? '')
 
+  const [coverSearch, setCoverSearch] = useState<'idle' | 'loading' | 'notFound'>('idle')
+
   const set = <K extends keyof ReadingDraft>(key: K, value: ReadingDraft[K]) => setDraft((d) => ({ ...d, [key]: value }))
   const text = (value: string) => value.trim() || undefined
+
+  const pickResult = async (result: BookResult) => {
+    const fields = await resultToDraft(result)
+    setDraft((d) => ({ ...d, ...fields }))
+    if (fields.authors) setAuthorsText(fields.authors.join(', '))
+    setCoverSearch('idle')
+  }
+
+  const searchCover = async () => {
+    setCoverSearch('loading')
+    const authors = authorsText.split(',').map((a) => a.trim()).filter(Boolean)
+    const coverUrl = await findCover({ ...draft, authors, isbn: text(draft.isbn ?? '') }).catch(() => undefined)
+    if (coverUrl) set('coverUrl', coverUrl)
+    setCoverSearch(coverUrl ? 'idle' : 'notFound')
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -70,20 +89,23 @@ function ReadingForm({ existing }: { existing?: Reading }) {
   return (
     <div className="min-h-dvh pb-10">
       <Header title={existing ? 'Modifier' : 'Ajouter une lecture'} back={existing ? `/lecture/${existing.id}` : '/'} />
-      <form onSubmit={submit} className="mx-auto max-w-xl space-y-4 p-4">
+      {/* Hors du formulaire principal : un <form> imbriqué n'est pas valide en HTML. */}
+      <div className="mx-auto max-w-xl space-y-4 px-4 pt-4">
         <div className="flex gap-2">
           {(Object.keys(TYPE_LABELS) as ReadingType[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => set('type', t)}
-              className={`flex-1 rounded-lg py-2 ${draft.type === t ? 'bg-accent text-white' : 'bg-white ring-1 ring-stone-300'}`}
+              className={`flex-1 rounded-lg border py-2 ${draft.type === t ? 'border-accent bg-accent text-white' : 'border-stone-300 bg-white'}`}
             >
               {TYPE_LABELS[t]}
             </button>
           ))}
         </div>
-
+        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} />}
+      </div>
+      <form onSubmit={submit} className="mx-auto max-w-xl space-y-4 p-4">
         <Field label="Titre *">
           <input required value={draft.title} onChange={(e) => set('title', e.target.value)} className={inputClass} />
         </Field>
@@ -139,7 +161,19 @@ function ReadingForm({ existing }: { existing?: Reading }) {
                 className={inputClass}
               />
             </Field>
-            <p className="mt-1 text-xs text-stone-500">Sans lien, une couverture par défaut est affichée.</p>
+            <button
+              type="button"
+              onClick={searchCover}
+              disabled={!draft.title.trim() || coverSearch === 'loading'}
+              className="mt-2 rounded-full border border-accent px-3 py-1 text-sm text-accent disabled:opacity-40"
+            >
+              {coverSearch === 'loading' ? 'Recherche…' : 'Chercher une couverture en ligne'}
+            </button>
+            <p className="mt-1 text-xs text-stone-500">
+              {coverSearch === 'notFound'
+                ? 'Aucune couverture trouvée : la couverture par défaut sera utilisée.'
+                : 'Sans couverture, une image par défaut est affichée.'}
+            </p>
           </div>
         </div>
 
