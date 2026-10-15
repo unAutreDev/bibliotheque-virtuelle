@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
@@ -17,6 +17,7 @@ import {
   type ReadingType,
 } from '../lib/db'
 import { findCover, resultToDraft, type BookResult } from '../lib/bookSearch'
+import { isPhoto, photoToCover } from '../lib/image'
 
 const EMPTY: ReadingDraft = { type: 'livre', title: '', authors: [], status: 'a_lire' }
 
@@ -44,6 +45,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
   const [draft, setDraft] = useState<ReadingDraft>(existing ?? EMPTY)
   const [authorsText, setAuthorsText] = useState(existing?.authors.join(', ') ?? '')
 
+  const [photoState, setPhotoState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [coverSearch, setCoverSearch] = useState<'idle' | 'loading' | 'notFound'>('idle')
 
   const set = <K extends keyof ReadingDraft>(key: K, value: ReadingDraft[K]) => setDraft((d) => ({ ...d, [key]: value }))
@@ -62,6 +64,20 @@ function ReadingForm({ existing }: { existing?: Reading }) {
     const coverUrl = await findCover({ ...draft, authors, isbn: text(draft.isbn ?? '') }).catch(() => undefined)
     if (coverUrl) set('coverUrl', coverUrl)
     setCoverSearch(coverUrl ? 'idle' : 'notFound')
+  }
+
+  const takePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setPhotoState('loading')
+    try {
+      set('coverUrl', await photoToCover(file))
+      setCoverSearch('idle')
+      setPhotoState('idle')
+    } catch {
+      setPhotoState('error')
+    }
   }
 
   const submit = async (event: FormEvent) => {
@@ -147,34 +163,62 @@ function ReadingForm({ existing }: { existing?: Reading }) {
           <textarea rows={4} value={draft.summary ?? ''} onChange={(e) => set('summary', e.target.value)} className={inputClass} />
         </Field>
 
-        <div className="flex items-start gap-3">
-          <div className="w-20 shrink-0">
-            <Cover url={text(draft.coverUrl ?? '')} title={draft.title || 'Sans titre'} type={draft.type} />
+        <div>
+          <span className="mb-1 block text-sm font-medium text-stone-600">Couverture</span>
+          <div className="flex items-start gap-3">
+            <div className="w-24 shrink-0">
+              <Cover url={text(draft.coverUrl ?? '')} title={draft.title || 'Sans titre'} type={draft.type} />
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-accent px-3 py-2 text-sm font-medium text-white active:scale-[0.98]">
+                <span aria-hidden>📷</span>
+                {photoState === 'loading' ? 'Traitement…' : 'Prendre en photo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={takePhoto}
+                  aria-label="Prendre la couverture en photo"
+                  className="sr-only"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={searchCover}
+                disabled={!draft.title.trim() || coverSearch === 'loading'}
+                className="w-full rounded-full border border-accent px-3 py-2 text-sm text-accent disabled:opacity-40"
+              >
+                {coverSearch === 'loading' ? 'Recherche…' : 'Chercher en ligne'}
+              </button>
+              {draft.coverUrl && (
+                <button type="button" onClick={() => set('coverUrl', undefined)} className="w-full text-xs text-stone-500 underline">
+                  Retirer la couverture
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex-1">
-            <Field label="Lien de la couverture (facultatif)">
+          <p className="mt-2 text-xs text-stone-500">
+            {photoState === 'error'
+              ? "Impossible de lire cette image. Essaie avec une autre photo."
+              : coverSearch === 'notFound'
+                ? 'Aucune couverture trouvée en ligne. Tu peux la prendre en photo.'
+                : isPhoto(draft.coverUrl)
+                  ? 'Photo enregistrée sur ton appareil.'
+                  : 'Sans couverture, une image par défaut est affichée.'}
+          </p>
+          {!isPhoto(draft.coverUrl) && (
+            <details className="mt-2 text-sm">
+              <summary className="cursor-pointer text-stone-500">Coller un lien d'image</summary>
               <input
                 type="url"
                 value={draft.coverUrl ?? ''}
                 onChange={(e) => set('coverUrl', e.target.value)}
                 placeholder="https://…"
-                className={inputClass}
+                aria-label="Lien de la couverture"
+                className={`${inputClass} mt-2`}
               />
-            </Field>
-            <button
-              type="button"
-              onClick={searchCover}
-              disabled={!draft.title.trim() || coverSearch === 'loading'}
-              className="mt-2 rounded-full border border-accent px-3 py-1 text-sm text-accent disabled:opacity-40"
-            >
-              {coverSearch === 'loading' ? 'Recherche…' : 'Chercher une couverture en ligne'}
-            </button>
-            <p className="mt-1 text-xs text-stone-500">
-              {coverSearch === 'notFound'
-                ? 'Aucune couverture trouvée : la couverture par défaut sera utilisée.'
-                : 'Sans couverture, une image par défaut est affichée.'}
-            </p>
-          </div>
+            </details>
+          )}
         </div>
 
         <Field label="ISBN">

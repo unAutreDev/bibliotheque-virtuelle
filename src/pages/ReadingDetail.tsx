@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
 import { StarRating } from '../components/StarRating'
+import { photoToCover } from '../lib/image'
 import { db, deleteReading, STATUS_LABELS, TYPE_LABELS, updateReading, type ReadingStatus } from '../lib/db'
 
 export function ReadingDetail() {
@@ -41,6 +42,26 @@ export function ReadingDetail() {
         <div className="flex gap-4">
           <div className="w-32 shrink-0">
             <Cover url={reading.coverUrl} title={reading.title} type={reading.type} />
+            <label className="mt-2 block cursor-pointer rounded-full border border-accent py-1 text-center text-xs text-accent">
+              📷 {reading.coverUrl ? 'Changer la photo' : 'Prendre en photo'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                aria-label="Prendre la couverture en photo"
+                className="sr-only"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!file) return
+                  try {
+                    await updateReading(reading.id, { coverUrl: await photoToCover(file) })
+                  } catch {
+                    alert("Impossible de lire cette image. Essaie avec une autre photo.")
+                  }
+                }}
+              />
+            </label>
           </div>
           <div className="min-w-0 space-y-1">
             <span className="inline-block rounded bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{TYPE_LABELS[reading.type]}</span>

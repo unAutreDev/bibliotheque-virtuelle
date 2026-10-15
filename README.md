@@ -13,6 +13,7 @@ et s'installe sur l'écran d'accueil du téléphone comme une application, avec 
 - Recherche en ligne par titre, auteur ou ISBN (Google Books, Open Library, et AniList pour les mangas) :
   on choisit le bon résultat et la fiche se remplit (couverture, auteurs, date, résumé, ISBN, tome)
 - Bouton « Chercher une couverture en ligne » pour une lecture saisie à la main
+- Photo de la couverture avec l'appareil photo du téléphone (réduite et stockée sur l'appareil), depuis le formulaire ou la fiche
 
 Les données sont stockées sur l'appareil (IndexedDB). Pense à exporter régulièrement.
 
@@ -37,5 +38,5 @@ Chaque push sur `main` publie l'app sur GitHub Pages via `.github/workflows/depl
 1. ✅ MVP : bibliothèque locale, fiche, note, recherche, export
 2. ✅ Recherche automatique avec couverture et infos pré-remplies
 3. Filtres et tri avancés, regroupement par série
-4. Scan du code-barres ISBN, photo de couverture
+4. Scan du code-barres ISBN (✅ photo de couverture)
 5. Bonus : statistiques, AniList pour les mangas, mode sombre
