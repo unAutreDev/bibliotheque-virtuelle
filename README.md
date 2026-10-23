@@ -17,7 +17,19 @@ et s'installe sur l'écran d'accueil du téléphone comme une application, avec 
   hors CDN : fichiers servis depuis `public/ocr`, copiés au build), puis recherche en ligne automatique
 - Photo de la couverture avec l'appareil photo du téléphone (réduite et stockée sur l'appareil), depuis le formulaire ou la fiche
 
-Les données sont stockées sur l'appareil (IndexedDB). Pense à exporter régulièrement.
+Les données sont stockées sur l'appareil (IndexedDB) et, une fois connecté, synchronisées entre appareils via Supabase.
+
+## Synchronisation (Supabase)
+
+1. Dans le projet Supabase : SQL Editor → coller `docs/supabase.sql` → Run.
+2. Authentication → Sign In / Providers → Email : désactiver « Confirm email » (un seul utilisateur).
+3. Renseigner l'URL du projet et la clé publique (anon / publishable) dans `src/config.ts`.
+4. Dans l'app : Réglages → Créer mon compte, puis Se connecter avec le même compte sur chaque appareil.
+
+Fonctionnement : chaque lecture a un identifiant `uid` commun à tous les appareils. La synchro récupère ce qui
+est arrivé sur le serveur depuis la dernière fois (`synced_at`, heure serveur), puis envoie les modifications et
+suppressions locales. En cas de conflit, la modification la plus récente (`updated_at`) l'emporte. Elle se lance à
+l'ouverture, au retour sur l'app, au retour du réseau et après chaque modification.
 
 ## Développement
 

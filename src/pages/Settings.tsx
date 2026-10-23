@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Header } from '../components/Header'
+import { SyncPanel } from '../components/SyncPanel'
 import { db } from '../lib/db'
 import { exportCsv, exportJson } from '../lib/export'
 
@@ -11,10 +12,11 @@ export function Settings() {
     <div className="min-h-dvh">
       <Header title="Réglages" back="/" />
       <main className="mx-auto max-w-xl space-y-4 p-4">
+        <SyncPanel />
         <section className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-stone-200">
           <h2 className="font-semibold">Exporter ma bibliothèque</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Tes lectures sont enregistrées uniquement sur cet appareil. Exporte-les régulièrement pour en garder une copie.
+            Garde une copie de tes lectures dans un fichier, pour Excel ou en sauvegarde.
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
