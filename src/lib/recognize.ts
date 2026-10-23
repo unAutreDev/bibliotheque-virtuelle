@@ -1,4 +1,4 @@
-import type { Line } from 'tesseract.js'
+import type { Block, Line } from 'tesseract.js'
 import { cleanIsbn } from './bookSearch'
 
 /**
@@ -20,6 +20,36 @@ export async function readIsbn(photo: Blob): Promise<string | undefined> {
 }
 
 const lineHeight = (line: Line) => line.bbox.y1 - line.bbox.y0
+
+/** Garde les lignes lisibles les plus hautes (le titre), dans l'ordre de lecture. */
+function pickTitle(blocks: Block[]): { title?: string; fullText: string } {
+  const lines = blocks
+    .flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines))
+    .map((line) => ({ line, text: cleanLine(line) }))
+    .filter(({ text }) => (text.match(/\p{L}/gu)?.length ?? 0) >= 3)
+  const fullText = lines.map(({ text }) => text).join('\n')
+  if (lines.length === 0) return { fullText }
+
+  // Le titre : la ligne la plus haute, plus ses voisines directes de taille comparable
+  // (titre sur deux lignes). Une ligne éloignée, comme l'auteur en bas, n'en fait pas partie.
+  const ordered = [...lines].sort((a, b) => a.line.bbox.y0 - b.line.bbox.y0)
+  const start = ordered.reduce((best, item, index) => (lineHeight(item.line) > lineHeight(ordered[best].line) ? index : best), 0)
+  const tallest = lineHeight(ordered[start].line)
+  const belongs = (index: number, neighbour: number) => {
+    const [a, b] = [ordered[Math.min(index, neighbour)].line, ordered[Math.max(index, neighbour)].line]
+    return lineHeight(ordered[index].line) >= tallest * 0.45 && b.bbox.y0 - a.bbox.y1 <= tallest * 1.2
+  }
+  let [from, to] = [start, start]
+  while (to - from < 2 && from > 0 && belongs(from - 1, from)) from--
+  while (to - from < 2 && to < ordered.length - 1 && belongs(to + 1, to)) to++
+  const title = ordered
+    .slice(from, to + 1)
+    .map(({ text }) => text)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { title: title || undefined, fullText }
+}
 
 function cleanLine(line: Line): string {
   return line.words
@@ -46,26 +76,16 @@ export async function readCoverText(
     logger: (message) => message.status === 'recognizing text' && onProgress?.(message.progress),
   })
   try {
-    // Texte épars : les couvertures mélangent titre, auteur et éditeur un peu partout.
-    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
-    const { data } = await worker.recognize(photo, {}, { blocks: true })
-    const lines = (data.blocks ?? [])
-      .flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines))
-      .map((line) => ({ line, text: cleanLine(line) }))
-      .filter(({ text }) => (text.match(/\p{L}/gu)?.length ?? 0) >= 3)
-    const fullText = lines.map(({ text }) => text).join('\n')
-    if (lines.length === 0) return { fullText }
-
-    const tallest = Math.max(...lines.map(({ line }) => lineHeight(line)))
-    const title = lines
-      .filter(({ line }) => lineHeight(line) >= tallest * 0.45)
-      .sort((a, b) => a.line.bbox.y0 - b.line.bbox.y0)
-      .slice(0, 3)
-      .map(({ text }) => text)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    return { title: title || undefined, fullText }
+    // Mise en page automatique d'abord : sur de vraies photos, le mode « texte épars » coupe
+    // les mots du titre en lettres isolées. Il ne sert que de second essai.
+    let result: { title?: string; fullText: string } = { fullText: '' }
+    for (const mode of [PSM.AUTO, PSM.SPARSE_TEXT]) {
+      await worker.setParameters({ tessedit_pageseg_mode: mode })
+      const { data } = await worker.recognize(photo, {}, { blocks: true })
+      result = pickTitle(data.blocks ?? [])
+      if (result.title) break
+    }
+    return result
   } finally {
     await worker.terminate()
   }
