@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
-import { StarRating } from '../components/StarRating'
+import { HeartRating } from '../components/HeartRating'
 import { photoToCover } from '../lib/image'
 import { db, deleteReading, STATUS_LABELS, TYPE_LABELS, updateReading, type ReadingStatus } from '../lib/db'
 
@@ -94,7 +94,7 @@ export function ReadingDetail() {
         <section className="mt-6 space-y-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-stone-200">
           <div>
             <h3 className="mb-1 text-sm font-medium text-stone-500">Ma note</h3>
-            <StarRating value={reading.rating} onChange={(rating) => updateReading(reading.id, { rating })} size="lg" />
+            <HeartRating value={reading.rating} onChange={(rating) => updateReading(reading.id, { rating })} size="lg" />
           </div>
           <div>
             <h3 className="mb-1 text-sm font-medium text-stone-500">Statut</h3>

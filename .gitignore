@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Copiés depuis node_modules au build (scripts/copy-ocr-assets.mjs)
+public/ocr

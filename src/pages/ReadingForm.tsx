@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
 import { OnlineSearch } from '../components/OnlineSearch'
-import { StarRating } from '../components/StarRating'
+import { HeartRating } from '../components/HeartRating'
 import {
   addReading,
   db,
@@ -53,7 +53,8 @@ function ReadingForm({ existing }: { existing?: Reading }) {
 
   const pickResult = async (result: BookResult) => {
     const fields = await resultToDraft(result)
-    setDraft((d) => ({ ...d, ...fields }))
+    // Une photo prise par l'utilisateur correspond à son édition : on la garde plutôt que l'image en ligne.
+    setDraft((d) => ({ ...d, ...fields, coverUrl: isPhoto(d.coverUrl) ? d.coverUrl : (fields.coverUrl ?? d.coverUrl) }))
     if (fields.authors) setAuthorsText(fields.authors.join(', '))
     setCoverSearch('idle')
   }
@@ -119,7 +120,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
             </button>
           ))}
         </div>
-        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} />}
+        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} onCoverPhoto={(cover) => set('coverUrl', cover)} />}
       </div>
       <form onSubmit={submit} className="mx-auto max-w-xl space-y-4 p-4">
         <Field label="Titre *">
@@ -237,7 +238,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
 
         <div>
           <span className="mb-1 block text-sm font-medium text-stone-600">Ma note</span>
-          <StarRating value={draft.rating} onChange={(v) => set('rating', v)} size="lg" />
+          <HeartRating value={draft.rating} onChange={(v) => set('rating', v)} size="lg" />
         </div>
 
         <Field label="Mon avis">

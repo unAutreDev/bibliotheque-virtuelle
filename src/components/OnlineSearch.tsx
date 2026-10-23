@@ -1,27 +1,79 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { searchBooks, type BookResult } from '../lib/bookSearch'
 import type { ReadingType } from '../lib/db'
+import { photoToCover } from '../lib/image'
+import { readCoverTitle, readIsbn } from '../lib/recognize'
 
 interface OnlineSearchProps {
   type: ReadingType
   onPick: (result: BookResult) => Promise<void>
+  /** Photo de la couverture reconnue, à garder comme couverture de la lecture. */
+  onCoverPhoto: (dataUrl: string) => void
 }
+
+type Recognition = { step: 'idle' } | { step: 'barcode' } | { step: 'text'; progress: number } | { step: 'failed'; message: string }
 
 type State = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done'; results: BookResult[]; failed: boolean }
 
 /** Recherche en ligne : l'utilisateur tape un titre, un auteur ou un ISBN et choisit le bon résultat. */
-export function OnlineSearch({ type, onPick }: OnlineSearchProps) {
+export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) {
   const [query, setQuery] = useState('')
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [picking, setPicking] = useState<string>()
+  const [recognition, setRecognition] = useState<Recognition>({ step: 'idle' })
 
-  const search = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!query.trim()) return
+  const runSearch = async (text: string) => {
+    if (!text.trim()) return
     setState({ kind: 'loading' })
-    const { results, failed } = await searchBooks(query.trim(), type)
+    const { results, failed } = await searchBooks(text.trim(), type)
     setState({ kind: 'done', results, failed })
   }
+
+  const search = (event: FormEvent) => {
+    event.preventDefault()
+    void runSearch(query)
+  }
+
+  /**
+   * Reconnaissance depuis une photo : d'abord le code-barres (4e de couverture, le plus fiable),
+   * sinon le titre écrit sur la couverture, puis lancement de la recherche en ligne.
+   */
+  const recognizePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setState({ kind: 'idle' })
+    try {
+      setRecognition({ step: 'barcode' })
+      const isbn = await readIsbn(file).catch(() => undefined)
+      if (isbn) {
+        setRecognition({ step: 'idle' })
+        setQuery(isbn)
+        await runSearch(isbn)
+        return
+      }
+
+      // Pas de code-barres : c'est sans doute la couverture, on la garde et on lit le titre.
+      const cover = await photoToCover(file)
+      onCoverPhoto(cover)
+      setRecognition({ step: 'text', progress: 0 })
+      const title = await readCoverTitle(cover, (progress) => setRecognition({ step: 'text', progress }))
+      if (!title) {
+        setRecognition({
+          step: 'failed',
+          message: "Je n'ai pas réussi à lire le titre. La photo est gardée comme couverture : tape le titre ci-dessus.",
+        })
+        return
+      }
+      setRecognition({ step: 'idle' })
+      setQuery(title)
+      await runSearch(title)
+    } catch {
+      setRecognition({ step: 'failed', message: "La reconnaissance n'a pas fonctionné. Réessaie avec une photo plus nette, ou tape le titre." })
+    }
+  }
+
+  const recognizing = recognition.step === 'barcode' || recognition.step === 'text'
 
   const pick = async (result: BookResult) => {
     setPicking(result.id)
@@ -50,8 +102,29 @@ export function OnlineSearch({ type, onPick }: OnlineSearchProps) {
           {state.kind === 'loading' ? '…' : 'Chercher'}
         </button>
       </form>
+      <label
+        className={`mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-full border border-accent px-3 py-2 text-sm font-medium text-accent active:scale-[0.98] ${recognizing ? 'pointer-events-none opacity-60' : ''}`}
+      >
+        <span aria-hidden>📷</span>
+        {recognition.step === 'barcode'
+          ? 'Lecture du code-barres…'
+          : recognition.step === 'text'
+            ? `Lecture du titre… ${Math.round(recognition.progress * 100)} %`
+            : 'Reconnaître avec une photo'}
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={recognizing}
+          onChange={recognizePhoto}
+          aria-label="Reconnaître le livre avec une photo"
+          className="sr-only"
+        />
+      </label>
+      {recognition.step === 'failed' && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{recognition.message}</p>}
       <p className="mt-2 px-1 text-xs text-stone-500">
-        Choisis un résultat pour remplir la fiche automatiquement, ou remplis-la à la main ci-dessous.
+        Photographie le code-barres au dos (le plus fiable) ou la couverture. Choisis ensuite le bon résultat pour remplir la
+        fiche, ou remplis-la à la main ci-dessous.
       </p>
 
       {state.kind === 'done' && state.failed && (

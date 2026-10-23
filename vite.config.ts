@@ -12,6 +12,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Les fichiers de lecture de texte (plusieurs Mo) ne sont téléchargés qu'à la première
+        // reconnaissance, puis gardés en cache pour les suivantes.
+        globIgnores: ['ocr/**'],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.includes('/ocr/') || url.pathname.endsWith('.wasm'),
+            handler: 'CacheFirst',
+            options: { cacheName: 'reconnaissance', expiration: { maxEntries: 10 } },
+          },
+        ],
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Bibliothèque Virtuelle',

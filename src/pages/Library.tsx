@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
-import { StarRating } from '../components/StarRating'
+import { HeartRating } from '../components/HeartRating'
 import { db, STATUS_LABELS, TYPE_LABELS, type Reading, type ReadingType } from '../lib/db'
 import { matchesQuery } from '../lib/search'
 
@@ -106,7 +106,7 @@ export function Library() {
                 <Link to={`/lecture/${r.id}`} className="block">
                   <Cover url={r.coverUrl} title={r.title} type={r.type} />
                   <p className="mt-1 line-clamp-2 text-xs leading-tight font-medium">{r.title}</p>
-                  <StarRating value={r.rating} />
+                  <HeartRating value={r.rating} />
                 </Link>
               </li>
             ))}
@@ -125,7 +125,7 @@ export function Library() {
                     <p className="mt-1 flex items-center gap-2 text-xs text-stone-500">
                       <span className="rounded bg-accent-soft px-1.5 py-0.5 text-accent">{TYPE_LABELS[r.type]}</span>
                       <span>{STATUS_LABELS[r.status]}</span>
-                      <StarRating value={r.rating} />
+                      <HeartRating value={r.rating} />
                     </p>
                   </div>
                 </Link>
