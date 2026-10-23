@@ -21,14 +21,25 @@ export async function readIsbn(photo: Blob): Promise<string | undefined> {
 
 const lineHeight = (line: Line) => line.bbox.y1 - line.bbox.y0
 
+export interface CoverText {
+  /** Le titre supposé (le plus gros texte). */
+  title?: string
+  /** Tout le texte lu, ligne par ligne. */
+  fullText: string
+  /** Les lignes lues, de la plus grande à la plus petite. */
+  lines: string[]
+}
+
 /** Garde les lignes lisibles les plus hautes (le titre), dans l'ordre de lecture. */
-function pickTitle(blocks: Block[]): { title?: string; fullText: string } {
+function pickTitle(blocks: Block[]): CoverText {
   const lines = blocks
     .flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines))
     .map((line) => ({ line, text: cleanLine(line) }))
     .filter(({ text }) => (text.match(/\p{L}/gu)?.length ?? 0) >= 3)
   const fullText = lines.map(({ text }) => text).join('\n')
-  if (lines.length === 0) return { fullText }
+  // Toutes les lignes, des plus grandes aux plus petites : elles servent de suggestions par champ.
+  const allLines = [...lines].sort((a, b) => lineHeight(b.line) - lineHeight(a.line)).map(({ text }) => text)
+  if (lines.length === 0) return { fullText, lines: allLines }
 
   // Le titre : la ligne la plus haute, plus ses voisines directes de taille comparable
   // (titre sur deux lignes). Une ligne éloignée, comme l'auteur en bas, n'en fait pas partie.
@@ -48,7 +59,7 @@ function pickTitle(blocks: Block[]): { title?: string; fullText: string } {
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return { title: title || undefined, fullText }
+  return { title: title || undefined, fullText, lines: allLines }
 }
 
 function cleanLine(line: Line): string {
@@ -66,7 +77,7 @@ function cleanLine(line: Line): string {
 export async function readCoverText(
   photo: Blob | string,
   onProgress?: (progress: number) => void,
-): Promise<{ title?: string; fullText: string }> {
+): Promise<CoverText> {
   const { createWorker, OEM, PSM } = await import('tesseract.js')
   const base = new URL('ocr/', document.baseURI).href
   const worker = await createWorker('fra', OEM.LSTM_ONLY, {
@@ -78,7 +89,7 @@ export async function readCoverText(
   try {
     // Mise en page automatique d'abord : sur de vraies photos, le mode « texte épars » coupe
     // les mots du titre en lettres isolées. Il ne sert que de second essai.
-    let result: { title?: string; fullText: string } = { fullText: '' }
+    let result: CoverText = { fullText: '', lines: [] }
     for (const mode of [PSM.AUTO, PSM.SPARSE_TEXT]) {
       await worker.setParameters({ tessedit_pageseg_mode: mode })
       const { data } = await worker.recognize(photo, {}, { blocks: true })

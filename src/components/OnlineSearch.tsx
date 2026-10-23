@@ -3,6 +3,7 @@ import { guessVolume, searchBooks, similarity, splitSeries, type BookResult } fr
 import type { ReadingDraft, ReadingType } from '../lib/db'
 import { photoToCover } from '../lib/image'
 import { readCoverText, readIsbn } from '../lib/recognize'
+import { tidyText } from '../lib/suggestions'
 
 interface OnlineSearchProps {
   type: ReadingType
@@ -11,6 +12,8 @@ interface OnlineSearchProps {
   onPrefill: (fields: Partial<ReadingDraft>) => void
   /** Photo de la couverture reconnue, à garder comme couverture de la lecture. */
   onCoverPhoto: (dataUrl: string) => void
+  /** Texte lu sur la photo et résultats trouvés, pour les suggestions sous chaque champ. */
+  onSources: (sources: { ocrLines?: string[]; results?: BookResult[] }) => void
 }
 
 type Recognition = { step: 'idle' } | { step: 'barcode' } | { step: 'text'; progress: number } | { step: 'failed'; message: string }
@@ -20,15 +23,8 @@ type State = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done'; results: B
 /** Seuil à partir duquel un résultat est assez proche du titre lu pour remplir la fiche sans demander. */
 const AUTO_PICK_SIMILARITY = 0.6
 
-/** « ASTÉRIX LE GAULOIS » → « Astérix le gaulois » : l'OCR rend souvent les titres en capitales. */
-function tidyTitle(text: string): string {
-  if (text !== text.toUpperCase()) return text
-  const lower = text.toLowerCase()
-  return lower.charAt(0).toUpperCase() + lower.slice(1)
-}
-
 /** Recherche en ligne : l'utilisateur tape un titre, un auteur ou un ISBN et choisit le bon résultat. */
-export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto }: OnlineSearchProps) {
+export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto, onSources }: OnlineSearchProps) {
   const [query, setQuery] = useState('')
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [picking, setPicking] = useState<string>()
@@ -41,6 +37,7 @@ export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto }: OnlineSe
     setState({ kind: 'loading' })
     const { results, failed } = await searchBooks(text.trim(), type)
     setState({ kind: 'done', results, failed })
+    onSources({ results })
     return results
   }
 
@@ -85,16 +82,18 @@ export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto }: OnlineSe
       const cover = await photoToCover(file)
       onCoverPhoto(cover)
       setRecognition({ step: 'text', progress: 0 })
-      const { title, fullText } = await readCoverText(cover, (progress) => setRecognition({ step: 'text', progress }))
+      const { title, fullText, lines } = await readCoverText(cover, (progress) => setRecognition({ step: 'text', progress }))
+      onSources({ ocrLines: lines })
       if (!title) {
         setRecognition({
           step: 'failed',
-          message: "Je n'ai pas réussi à lire le titre. La photo est gardée comme couverture : tape le titre ci-dessus.",
+          message:
+            "Je n'ai pas réussi à lire le titre. La photo est gardée comme couverture : tape le titre, ou touche une suggestion sous les champs.",
         })
         return
       }
       setRecognition({ step: 'idle' })
-      const split = splitSeries(tidyTitle(title))
+      const split = splitSeries(tidyText(title))
       const volume = split.volume ?? guessVolume(fullText)
       onPrefill({ title: split.title, ...(split.series && { series: split.series }), ...(volume !== undefined && { volume }) })
       setQuery(title)
@@ -159,7 +158,7 @@ export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto }: OnlineSe
       </label>
       {recognition.step === 'failed' && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{recognition.message}</p>}
       <p className="mt-2 px-1 text-xs text-stone-500">
-        Photographie le code-barres au dos (le plus fiable) ou la couverture. Choisis ensuite le bon résultat pour remplir la
+        Photographie la couverture : ce qui est lu remplit la fiche, et des suggestions apparaissent sous chaque champ. Touche un résultat pour remplir la
         fiche, ou remplis-la à la main ci-dessous.
       </p>
 

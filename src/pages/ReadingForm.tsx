@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
 import { OnlineSearch } from '../components/OnlineSearch'
 import { HeartRating } from '../components/HeartRating'
+import { SuggestionChips } from '../components/SuggestionChips'
 import {
   addReading,
   db,
@@ -16,8 +17,10 @@ import {
   type ReadingStatus,
   type ReadingType,
 } from '../lib/db'
-import { findCover, resultToDraft, type BookResult } from '../lib/bookSearch'
+import { findCover, resultToDraft, searchBooks, type BookResult } from '../lib/bookSearch'
 import { isPhoto, photoToCover } from '../lib/image'
+import { readIsbn } from '../lib/recognize'
+import { buildSuggestions } from '../lib/suggestions'
 
 const EMPTY: ReadingDraft = { type: 'livre', title: '', authors: [], status: 'a_lire' }
 
@@ -29,12 +32,15 @@ export function ReadingFormPage() {
   return <ReadingForm key={existing?.id ?? 'new'} existing={existing} />
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, suggestions }: { label: string; children: ReactNode; suggestions?: ReactNode }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-stone-600">{label}</span>
-      {children}
-    </label>
+    <div>
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-stone-600">{label}</span>
+        {children}
+      </label>
+      {suggestions}
+    </div>
   )
 }
 
@@ -47,6 +53,10 @@ function ReadingForm({ existing }: { existing?: Reading }) {
 
   const [photoState, setPhotoState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [coverSearch, setCoverSearch] = useState<'idle' | 'loading' | 'notFound'>('idle')
+  const [isbnScan, setIsbnScan] = useState<'idle' | 'loading' | 'notFound' | 'error'>('idle')
+  const [ocrLines, setOcrLines] = useState<string[]>([])
+  const [results, setResults] = useState<BookResult[]>([])
+  const suggestions = useMemo(() => buildSuggestions(ocrLines, results), [ocrLines, results])
 
   const set = <K extends keyof ReadingDraft>(key: K, value: ReadingDraft[K]) => setDraft((d) => ({ ...d, [key]: value }))
   const text = (value: string) => value.trim() || undefined
@@ -62,6 +72,48 @@ function ReadingForm({ existing }: { existing?: Reading }) {
   const prefill = (fields: Partial<ReadingDraft>) => {
     setDraft((d) => ({ ...d, ...fields }))
     if (fields.authors) setAuthorsText(fields.authors.join(', '))
+  }
+
+  const authorsList = authorsText.split(',').map((a) => a.trim()).filter(Boolean)
+  const addAuthor = (author: string) => setAuthorsText([...authorsList, author].join(', '))
+
+  const onSources = (sources: { ocrLines?: string[]; results?: BookResult[] }) => {
+    if (sources.ocrLines) setOcrLines(sources.ocrLines)
+    if (sources.results) setResults(sources.results)
+  }
+
+  /** Code-barres photographié depuis le champ ISBN : remplit l'ISBN, puis les champs encore vides. */
+  const scanIsbn = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setIsbnScan('loading')
+    try {
+      const isbn = await readIsbn(file)
+      if (!isbn) {
+        setIsbnScan('notFound')
+        return
+      }
+      set('isbn', isbn)
+      setIsbnScan('idle')
+      const { results: found } = await searchBooks(isbn, draft.type)
+      setResults(found)
+      const match = found.find((r) => r.isbn?.replace(/-/g, '') === isbn) ?? (found.length === 1 ? found[0] : undefined)
+      if (!match) return
+      const fields = await resultToDraft(match)
+      setDraft((d) => {
+        const filled = { ...d }
+        for (const [key, value] of Object.entries(fields) as [keyof ReadingDraft, never][]) {
+          const currentValue = d[key]
+          const empty = currentValue === undefined || currentValue === '' || (Array.isArray(currentValue) && currentValue.length === 0)
+          if (empty && key !== 'authors') filled[key] = value
+        }
+        return filled
+      })
+      if (fields.authors?.length && authorsList.length === 0) setAuthorsText(fields.authors.join(', '))
+    } catch {
+      setIsbnScan('error')
+    }
   }
 
   const searchCover = async () => {
@@ -125,21 +177,61 @@ function ReadingForm({ existing }: { existing?: Reading }) {
             </button>
           ))}
         </div>
-        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} onPrefill={prefill} onCoverPhoto={(cover) => set('coverUrl', cover)} />}
+        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} onPrefill={prefill} onCoverPhoto={(cover) => set('coverUrl', cover)} onSources={onSources} />}
       </div>
       <form onSubmit={submit} className="mx-auto max-w-xl space-y-4 p-4">
-        <Field label="Titre *">
+        {/* En premier : le code-barres au dos permet de remplir tout le reste. */}
+        <div>
+          <Field
+            label="ISBN"
+            suggestions={<SuggestionChips values={suggestions.isbn} current={[draft.isbn ?? '']} onPick={(v) => set('isbn', v)} />}
+          >
+            <input inputMode="numeric" value={draft.isbn ?? ''} onChange={(e) => set('isbn', e.target.value)} className={inputClass} />
+          </Field>
+          <label
+            className={`mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-full border border-accent px-3 py-2 text-sm text-accent active:scale-[0.98] ${isbnScan === 'loading' ? 'pointer-events-none opacity-60' : ''}`}
+          >
+            <span aria-hidden>📷</span>
+            {isbnScan === 'loading' ? 'Lecture du code-barres…' : 'Lire le code-barres au dos'}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={scanIsbn}
+              aria-label="Photographier le code-barres"
+              className="sr-only"
+            />
+          </label>
+          {(isbnScan === 'notFound' || isbnScan === 'error') && (
+            <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              Je n'ai pas trouvé de code-barres sur cette photo. Cadre-le de plus près, bien à plat et sans reflet.
+            </p>
+          )}
+        </div>
+
+        <Field
+          label="Titre *"
+          suggestions={<SuggestionChips values={suggestions.title} current={[draft.title]} onPick={(v) => set('title', v)} />}
+        >
           <input required value={draft.title} onChange={(e) => set('title', e.target.value)} className={inputClass} />
         </Field>
 
         <div className="flex gap-3">
           <div className="flex-1">
-            <Field label="Série">
+            <Field
+              label="Série"
+              suggestions={<SuggestionChips values={suggestions.series} current={[draft.series ?? '']} onPick={(v) => set('series', v)} />}
+            >
               <input value={draft.series ?? ''} onChange={(e) => set('series', e.target.value)} className={inputClass} />
             </Field>
           </div>
           <div className="w-24">
-            <Field label="Tome">
+            <Field
+              label="Tome"
+              suggestions={
+                <SuggestionChips values={suggestions.volume} current={[String(draft.volume ?? '')]} onPick={(v) => set('volume', Number(v))} />
+              }
+            >
               <input
                 type="number"
                 min={0}
@@ -152,11 +244,19 @@ function ReadingForm({ existing }: { existing?: Reading }) {
           </div>
         </div>
 
-        <Field label="Auteur(s), séparés par des virgules">
+        <Field
+          label="Auteur(s), séparés par des virgules"
+          suggestions={<SuggestionChips values={suggestions.authors} current={authorsList} onPick={addAuthor} />}
+        >
           <input value={authorsText} onChange={(e) => setAuthorsText(e.target.value)} className={inputClass} />
         </Field>
 
-        <Field label="Date de parution">
+        <Field
+          label="Date de parution"
+          suggestions={
+            <SuggestionChips values={suggestions.publishedDate} current={[draft.publishedDate ?? '']} onPick={(v) => set('publishedDate', v)} />
+          }
+        >
           <input
             value={draft.publishedDate ?? ''}
             onChange={(e) => set('publishedDate', e.target.value)}
@@ -226,10 +326,6 @@ function ReadingForm({ existing }: { existing?: Reading }) {
             </details>
           )}
         </div>
-
-        <Field label="ISBN">
-          <input inputMode="numeric" value={draft.isbn ?? ''} onChange={(e) => set('isbn', e.target.value)} className={inputClass} />
-        </Field>
 
         <Field label="Statut">
           <select value={draft.status} onChange={(e) => set('status', e.target.value as ReadingStatus)} className={inputClass}>

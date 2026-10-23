@@ -13,6 +13,8 @@ et s'installe sur l'écran d'accueil du téléphone comme une application, avec 
 - Recherche en ligne par titre, auteur ou ISBN (Google Books, Open Library, et AniList pour les mangas) :
   on choisit le bon résultat et la fiche se remplit (couverture, auteurs, date, résumé, ISBN, tome)
 - Bouton « Chercher une couverture en ligne » pour une lecture saisie à la main
+- Bouton « Lire le code-barres au dos » sur le champ ISBN : remplit l'ISBN, puis les champs vides via la recherche en ligne
+- Suggestions à toucher sous chaque champ, tirées du texte lu sur la photo et des résultats en ligne
 - Reconnaissance par photo : lecture du code-barres ISBN au dos, sinon du titre sur la couverture (Tesseract,
   hors CDN : fichiers servis depuis `public/ocr`, copiés au build), puis recherche en ligne automatique
 - Photo de la couverture avec l'appareil photo du téléphone (réduite et stockée sur l'appareil), depuis le formulaire ou la fiche
