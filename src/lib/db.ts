@@ -12,6 +12,8 @@ export interface Reading {
   series?: string
   volume?: number
   authors: string[]
+  /** Genres (Science-fiction, Fantasy…), absents sur les lectures ajoutées avant. */
+  genres?: string[]
   publishedDate?: string
   summary?: string
   isbn?: string

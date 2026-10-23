@@ -9,9 +9,10 @@ export interface FieldSuggestions {
   volume: number[]
   publishedDate: string[]
   isbn: string[]
+  genres: string[]
 }
 
-export const NO_SUGGESTIONS: FieldSuggestions = { title: [], series: [], authors: [], volume: [], publishedDate: [], isbn: [] }
+export const NO_SUGGESTIONS: FieldSuggestions = { title: [], series: [], authors: [], volume: [], publishedDate: [], isbn: [], genres: [] }
 
 const MAX_PER_FIELD = 6
 
@@ -60,5 +61,6 @@ export function buildSuggestions(ocrLines: string[], results: BookResult[]): Fie
     volume: unique([guessVolume(ocrText), ...top.map(({ result, split }) => result.volume ?? split.volume), ...numbers]),
     publishedDate: unique([...top.map(({ result }) => result.publishedDate), ...years]),
     isbn: unique([...top.map(({ result }) => result.isbn), ...isbns]),
+    genres: unique(top.flatMap(({ result }) => result.genres ?? [])),
   }
 }

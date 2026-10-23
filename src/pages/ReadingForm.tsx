@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
+import { GenreField } from '../components/GenreField'
 import { Header } from '../components/Header'
 import { OnlineSearch } from '../components/OnlineSearch'
 import { HeartRating } from '../components/HeartRating'
@@ -150,6 +151,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
       isbn: text(draft.isbn ?? ''),
       coverUrl: text(draft.coverUrl ?? ''),
       comment: text(draft.comment ?? ''),
+      genres: draft.genres?.length ? draft.genres : undefined,
     }
     if (existing) {
       await updateReading(existing.id, clean)
@@ -250,6 +252,8 @@ function ReadingForm({ existing }: { existing?: Reading }) {
         >
           <input value={authorsText} onChange={(e) => setAuthorsText(e.target.value)} className={inputClass} />
         </Field>
+
+        <GenreField value={draft.genres ?? []} onChange={(genres) => set('genres', genres)} suggestions={suggestions.genres} />
 
         <Field
           label="Date de parution"

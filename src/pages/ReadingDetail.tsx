@@ -72,6 +72,15 @@ export function ReadingDetail() {
                 {reading.volume !== undefined && ` · Tome ${reading.volume}`}
               </p>
             )}
+            {reading.genres && reading.genres.length > 0 && (
+              <ul className="flex flex-wrap gap-1 pt-1" aria-label="Genres">
+                {reading.genres.map((genre) => (
+                  <li key={genre} className="rounded-full border border-accent/30 px-2 py-0.5 text-xs text-accent">
+                    {genre}
+                  </li>
+                ))}
+              </ul>
+            )}
             <dl className="space-y-1 pt-1 text-sm">
               <div>
                 <dt className="inline text-stone-500">Auteur : </dt>
