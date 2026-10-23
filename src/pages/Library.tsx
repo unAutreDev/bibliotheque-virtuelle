@@ -1,7 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cover } from '../components/Cover'
+import { Choice, FilterSection, FilterSheet } from '../components/FilterSheet'
 import { Header } from '../components/Header'
 import { HeartRating } from '../components/HeartRating'
 import { Shelf } from '../components/Shelf'
@@ -48,6 +49,28 @@ function loadView(): View {
   }
 }
 
+const SERIES_FILTER_LABELS: Record<SeriesState | 'toutes', string> = {
+  toutes: 'Toutes',
+  en_cours: 'En cours',
+  termine: 'Terminées',
+}
+
+/** Rappel d'un filtre actif, qu'un toucher suffit à retirer. */
+function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <button
+      onClick={onRemove}
+      className="flex items-center gap-1 rounded-full bg-accent-soft py-1 pr-2 pl-3 text-sm text-accent"
+      aria-label={`Retirer le filtre ${label}`}
+    >
+      {label}
+      <span aria-hidden className="text-base leading-none">
+        ×
+      </span>
+    </button>
+  )
+}
+
 function subtitle(reading: Reading) {
   const series = reading.series ? `${reading.series}${reading.volume ? ` · T${reading.volume}` : ''}` : ''
   return [series, reading.authors.join(', ')].filter(Boolean).join(' — ')
@@ -60,6 +83,8 @@ export function Library() {
   const [view, setView] = useState<View>(loadView)
   const [grouped, setGrouped] = useState(loadGrouped)
   const [seriesFilter, setSeriesFilter] = useState<SeriesState | 'toutes'>('toutes')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const closeSheet = useCallback(() => setSheetOpen(false), [])
 
   const changeView = (next: View) => {
     setView(next)
@@ -70,14 +95,22 @@ export function Library() {
     }
   }
 
-  const toggleGrouped = () => {
-    setGrouped(!grouped)
+  const changeGrouped = (next: boolean) => {
+    setGrouped(next)
+    if (!next) setSeriesFilter('toutes')
     try {
-      localStorage.setItem('groupe', grouped ? 'aucun' : 'series')
+      localStorage.setItem('groupe', next ? 'series' : 'aucun')
     } catch {
       // Préférence non mémorisée, sans conséquence.
     }
   }
+
+  const resetFilters = () => {
+    setType('tous')
+    changeGrouped(false)
+  }
+
+  const activeCount = (type !== 'tous' ? 1 : 0) + (grouped ? 1 : 0) + (grouped && seriesFilter !== 'toutes' ? 1 : 0)
 
   const filtered = (readings ?? []).filter((r) => (type === 'tous' || r.type === type) && matchesQuery(r, query))
   const { groups, standalone } = groupBySeries(filtered)
@@ -141,43 +174,44 @@ export function Library() {
           placeholder="Rechercher un titre, un auteur, une série…"
           className="w-full rounded-full border border-stone-300 bg-white px-4 py-2 outline-none focus:border-accent"
         />
-        <div className="flex items-center gap-2 overflow-x-auto">
-          {(['tous', 'livre', 'bd', 'manga'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setType(t)}
-              className={`shrink-0 rounded-full border px-3 py-1 text-sm ${type === t ? 'border-accent bg-accent text-white' : 'border-stone-300 bg-white text-stone-700'}`}
-            >
-              {t === 'tous' ? 'Tous' : TYPE_LABELS[t]}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSheetOpen(true)}
+            aria-haspopup="dialog"
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm ${activeCount > 0 ? 'border-accent bg-white text-accent' : 'border-stone-300 bg-white text-stone-700'}`}
+          >
+            <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <path d="M3 5h14M6 10h8M8.5 15h3" />
+            </svg>
+            Filtres
+            {activeCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-xs font-medium text-white tabular-nums">
+                {activeCount}
+              </span>
+            )}
+          </button>
           <span className="flex-1" />
-          <button
-            onClick={toggleGrouped}
-            aria-pressed={grouped}
-            className={`shrink-0 rounded-full border px-3 py-1 text-sm ${grouped ? 'border-accent bg-accent-soft text-accent' : 'border-stone-300 bg-white'}`}
-          >
-            ▤ Séries
-          </button>
-          <button
-            onClick={() => changeView(view === 'grille' ? 'liste' : 'grille')}
-            className="shrink-0 rounded-full border border-stone-300 bg-white px-3 py-1 text-sm"
-            aria-label={view === 'grille' ? 'Afficher en liste' : 'Afficher en grille'}
-          >
-            {view === 'grille' ? '☰ Liste' : '▦ Grille'}
-          </button>
-        </div>
-        {grouped && (
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {(['toutes', 'en_cours', 'termine'] as const).map((s) => (
+          <div className="flex rounded-full border border-stone-300 bg-white p-0.5" role="group" aria-label="Affichage">
+            {(['grille', 'liste'] as const).map((v) => (
               <button
-                key={s}
-                onClick={() => setSeriesFilter(s)}
-                className={`shrink-0 rounded-full border px-3 py-1 text-xs ${seriesFilter === s ? 'border-accent bg-accent text-white' : 'border-stone-300 bg-white text-stone-700'}`}
+                key={v}
+                onClick={() => changeView(v)}
+                aria-pressed={view === v}
+                aria-label={v === 'grille' ? 'Afficher en grille' : 'Afficher en liste'}
+                className={`rounded-full px-2.5 py-0.5 text-sm ${view === v ? 'bg-accent text-white' : 'text-stone-600'}`}
               >
-                {s === 'toutes' ? 'Toutes les séries' : s === 'termine' ? 'Terminées' : 'En cours'}
+                {v === 'grille' ? '▦' : '☰'}
               </button>
             ))}
+          </div>
+        </div>
+        {activeCount > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {type !== 'tous' && <ActivePill label={TYPE_LABELS[type]} onRemove={() => setType('tous')} />}
+            {grouped && <ActivePill label="Par série" onRemove={() => changeGrouped(false)} />}
+            {grouped && seriesFilter !== 'toutes' && (
+              <ActivePill label={`Séries ${SERIES_FILTER_LABELS[seriesFilter].toLowerCase()}`} onRemove={() => setSeriesFilter('toutes')} />
+            )}
           </div>
         )}
         {readings && readings.length > 0 && (
@@ -257,6 +291,44 @@ export function Library() {
           </div>
         )}
       </main>
+
+      <FilterSheet
+        open={sheetOpen}
+        onClose={closeSheet}
+        onReset={resetFilters}
+        confirmLabel={
+          nothingShown
+            ? 'Aucun résultat'
+            : grouped
+              ? `Voir ${shownGroups.length} série${shownGroups.length > 1 ? 's' : ''}`
+              : `Voir ${filtered.length} lecture${filtered.length > 1 ? 's' : ''}`
+        }
+      >
+        <FilterSection title="Type">
+          {(['tous', 'livre', 'bd', 'manga'] as const).map((t) => (
+            <Choice key={t} selected={type === t} onClick={() => setType(t)}>
+              {t === 'tous' ? 'Tous' : TYPE_LABELS[t]}
+            </Choice>
+          ))}
+        </FilterSection>
+        <FilterSection title="Rangement">
+          <Choice selected={!grouped} onClick={() => changeGrouped(false)}>
+            Par statut
+          </Choice>
+          <Choice selected={grouped} onClick={() => changeGrouped(true)}>
+            Par série
+          </Choice>
+        </FilterSection>
+        {grouped && (
+          <FilterSection title="Séries">
+            {(['toutes', 'en_cours', 'termine'] as const).map((s) => (
+              <Choice key={s} selected={seriesFilter === s} onClick={() => setSeriesFilter(s)}>
+                {SERIES_FILTER_LABELS[s]}
+              </Choice>
+            ))}
+          </FilterSection>
+        )}
+      </FilterSheet>
 
       <Link
         to="/ajouter"

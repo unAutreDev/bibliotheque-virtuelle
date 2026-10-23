@@ -31,3 +31,31 @@ body {
   background: linear-gradient(#4a8a84, var(--color-accent) 45%, var(--color-accent-dark));
   box-shadow: 0 6px 8px -2px rgb(20 50 48 / 0.35);
 }
+
+/* Feuille de filtres : elle glisse depuis le bas. */
+.sheet-backdrop {
+  animation: sheet-fade 0.2s ease-out;
+}
+
+.sheet-panel {
+  animation: sheet-up 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop,
+  .sheet-panel {
+    animation: none;
+  }
+}
