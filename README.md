@@ -8,6 +8,8 @@ et s'installe sur l'écran d'accueil du téléphone comme une application, avec 
 - Ajouter, modifier et supprimer une lecture (type, titre, série et tome, auteurs, date, résumé, ISBN, lien de couverture)
 - Couverture par défaut selon le type quand il n'y a pas d'image
 - Bibliothèque en grille ou en liste, filtre par type, recherche par titre, auteur ou série (sans tenir compte des accents)
+- Regroupement par série (bouton « Séries ») : tomes triés par numéro, étiquette « Terminé » quand tous les tomes
+  sont lus, sinon « En cours », et filtre sur les séries terminées ou en cours
 - Fiche détaillée avec note sur 5 (en cœurs), statut (à lire, en cours, lu, abandonné) et avis
 - Export CSV (Excel) et JSON depuis les réglages
 - Recherche en ligne par titre, auteur ou ISBN (Google Books, Open Library, et AniList pour les mangas) :
