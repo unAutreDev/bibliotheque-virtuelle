@@ -10,6 +10,8 @@ et s'installe sur l'écran d'accueil du téléphone comme une application, avec 
 - Bibliothèque en grille ou en liste, filtre par type, recherche par titre, auteur ou série (sans tenir compte des accents)
 - Regroupement par série (bouton « Séries ») : tomes triés par numéro, étiquette « Terminé » quand tous les tomes
   sont lus, sinon « En cours », et filtre sur les séries terminées ou en cours
+- Genres (un ou plusieurs : Science-fiction, Fantasy… ou saisie libre), proposés depuis les catégories trouvées en ligne,
+  filtrables dans la feuille « Filtres » et inclus dans la recherche et les exports
 - Fiche détaillée avec note sur 5 (en cœurs), statut (à lire, en cours, lu, abandonné) et avis
 - Export CSV (Excel) et JSON depuis les réglages
 - Recherche en ligne par titre, auteur ou ISBN (Google Books, Open Library, et AniList pour les mangas) :

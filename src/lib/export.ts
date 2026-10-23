@@ -26,13 +26,14 @@ function csvCell(value: unknown): string {
 
 /** CSV séparé par des points-virgules, avec BOM, pour s'ouvrir directement dans Excel en français. */
 export function exportCsv(readings: Reading[]) {
-  const header = ['Type', 'Titre', 'Série', 'Tome', 'Auteurs', 'Date de parution', 'Statut', 'Note', 'Commentaire', 'ISBN', 'Résumé', 'Ajouté le']
+  const header = ['Type', 'Titre', 'Série', 'Tome', 'Auteurs', 'Genres', 'Date de parution', 'Statut', 'Note', 'Commentaire', 'ISBN', 'Résumé', 'Ajouté le']
   const rows = readings.map((r) => [
     TYPE_LABELS[r.type],
     r.title,
     r.series,
     r.volume,
     r.authors.join(', '),
+    r.genres?.join(', '),
     r.publishedDate,
     STATUS_LABELS[r.status],
     r.rating,

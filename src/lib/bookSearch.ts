@@ -1,4 +1,5 @@
 import type { ReadingDraft, ReadingType } from './db'
+import { mapGenres } from './genres'
 import { normalize } from './search'
 
 export type Source = 'Google Books' | 'Open Library' | 'AniList'
@@ -15,6 +16,8 @@ export interface BookResult {
   coverUrl?: string
   series?: string
   volume?: number
+  /** Genres en français, déduits des catégories du site. */
+  genres?: string[]
   /** Résumé à charger seulement si le résultat est choisi (Open Library). */
   loadSummary?: () => Promise<string | undefined>
 }
@@ -89,6 +92,7 @@ interface GoogleVolume {
     authors?: string[]
     publishedDate?: string
     description?: string
+    categories?: string[]
     industryIdentifiers?: { type: string; identifier: string }[]
     imageLinks?: { thumbnail?: string; smallThumbnail?: string }
   }
@@ -115,6 +119,7 @@ async function searchGoogle(query: string, isbn?: string): Promise<BookResult[]>
         isbn: (ids.find((i) => i.type === 'ISBN_13') ?? ids.find((i) => i.type === 'ISBN_10'))?.identifier,
         coverUrl: https(thumbnail)?.replace('&edge=curl', ''),
         volume: guessVolume(title),
+        genres: mapGenres(v.categories ?? []),
       }
     })
 }
@@ -128,6 +133,7 @@ interface OpenLibraryDoc {
   first_publish_year?: number
   cover_i?: number
   isbn?: string[]
+  subject?: string[]
 }
 
 async function loadOpenLibrarySummary(workKey: string): Promise<string | undefined> {
@@ -139,7 +145,7 @@ async function loadOpenLibrarySummary(workKey: string): Promise<string | undefin
 async function searchOpenLibrary(query: string, isbn?: string): Promise<BookResult[]> {
   const params = isbn ? `isbn=${isbn}` : `q=${encodeURIComponent(query)}`
   const data = await getJson<{ docs?: OpenLibraryDoc[] }>(
-    `https://openlibrary.org/search.json?${params}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,isbn`,
+    `https://openlibrary.org/search.json?${params}&limit=10&fields=key,title,author_name,first_publish_year,cover_i,isbn,subject`,
   )
   return (data.docs ?? []).map((doc) => ({
     id: `openlibrary-${doc.key}`,
@@ -150,6 +156,8 @@ async function searchOpenLibrary(query: string, isbn?: string): Promise<BookResu
     isbn: isbn ?? doc.isbn?.find((i) => i.length === 13) ?? doc.isbn?.[0],
     coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : undefined,
     volume: guessVolume(doc.title),
+    // Les sujets Open Library sont nombreux et en vrac : seuls les premiers sont fiables.
+    genres: mapGenres(doc.subject?.slice(0, 25) ?? []),
     loadSummary: () => loadOpenLibrarySummary(doc.key),
   }))
 }
@@ -162,6 +170,8 @@ interface AniListMedia {
   description?: string
   startDate?: { year?: number; month?: number; day?: number }
   coverImage?: { extraLarge?: string; large?: string }
+  genres?: string[]
+  tags?: { name: string; rank: number }[]
   staff?: { edges: { role: string; node: { name: { full: string } } }[] }
 }
 
@@ -173,6 +183,8 @@ const ANILIST_QUERY = `query ($search: String) {
       description(asHtml: false)
       startDate { year month day }
       coverImage { extraLarge large }
+      genres
+      tags { name rank }
       staff(perPage: 4, sort: RELEVANCE) { edges { role node { name { full } } } }
     }
   }
@@ -202,6 +214,8 @@ async function searchAniList(query: string): Promise<BookResult[]> {
       publishedDate: date,
       summary: stripHtml(m.description),
       coverUrl: m.coverImage?.extraLarge ?? m.coverImage?.large,
+      // Les étiquettes Shounen, Seinen… complètent les genres d'AniList.
+      genres: mapGenres([...(m.genres ?? []), ...(m.tags ?? []).filter((t) => t.rank >= 60).map((t) => t.name)]),
     }
   })
 }
@@ -258,6 +272,7 @@ export async function resultToDraft(result: BookResult): Promise<Partial<Reading
   if (coverUrl) draft.coverUrl = coverUrl
   const volume = result.volume ?? split.volume
   if (volume !== undefined) draft.volume = volume
+  if (result.genres?.length) draft.genres = result.genres
   return draft
 }
 

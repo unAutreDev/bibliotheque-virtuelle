@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Choice, FilterSection, FilterSheet } from '../components/FilterSheet'
@@ -8,7 +8,7 @@ import { HeartRating } from '../components/HeartRating'
 import { Shelf } from '../components/Shelf'
 import { StatsCard } from '../components/StatsCard'
 import { db, STATUS_LABELS, TYPE_LABELS, type Reading, type ReadingStatus, type ReadingType } from '../lib/db'
-import { matchesQuery } from '../lib/search'
+import { matchesQuery, normalize } from '../lib/search'
 import { groupBySeries, SERIES_STATE_LABELS, type SeriesGroup, type SeriesState } from '../lib/series'
 
 type View = 'grille' | 'liste'
@@ -71,6 +71,20 @@ function ActivePill({ label, onRemove }: { label: string; onRemove: () => void }
   )
 }
 
+/** Genres présents dans la bibliothèque, les plus fréquents d'abord. */
+function genresInLibrary(readings: Reading[]): string[] {
+  const counts = new Map<string, { label: string; count: number }>()
+  for (const reading of readings) {
+    for (const genre of reading.genres ?? []) {
+      const key = normalize(genre)
+      const entry = counts.get(key) ?? { label: genre, count: 0 }
+      entry.count++
+      counts.set(key, entry)
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr')).map((e) => e.label)
+}
+
 function subtitle(reading: Reading) {
   const series = reading.series ? `${reading.series}${reading.volume ? ` · T${reading.volume}` : ''}` : ''
   return [series, reading.authors.join(', ')].filter(Boolean).join(' — ')
@@ -83,6 +97,8 @@ export function Library() {
   const [view, setView] = useState<View>(loadView)
   const [grouped, setGrouped] = useState(loadGrouped)
   const [seriesFilter, setSeriesFilter] = useState<SeriesState | 'toutes'>('toutes')
+  // Plusieurs genres choisis : une lecture s'affiche si elle a au moins l'un d'eux.
+  const [genres, setGenres] = useState<string[]>([])
   const [sheetOpen, setSheetOpen] = useState(false)
   const closeSheet = useCallback(() => setSheetOpen(false), [])
 
@@ -105,14 +121,26 @@ export function Library() {
     }
   }
 
+  const toggleGenre = (genre: string) =>
+    setGenres((current) => (current.includes(genre) ? current.filter((g) => g !== genre) : [...current, genre]))
+
+  const libraryGenres = useMemo(() => genresInLibrary(readings ?? []), [readings])
+
   const resetFilters = () => {
     setType('tous')
+    setGenres([])
     changeGrouped(false)
   }
 
-  const activeCount = (type !== 'tous' ? 1 : 0) + (grouped ? 1 : 0) + (grouped && seriesFilter !== 'toutes' ? 1 : 0)
+  const activeCount = (type !== 'tous' ? 1 : 0) + genres.length + (grouped ? 1 : 0) + (grouped && seriesFilter !== 'toutes' ? 1 : 0)
 
-  const filtered = (readings ?? []).filter((r) => (type === 'tous' || r.type === type) && matchesQuery(r, query))
+  const wanted = new Set(genres.map(normalize))
+  const filtered = (readings ?? []).filter(
+    (r) =>
+      (type === 'tous' || r.type === type) &&
+      (wanted.size === 0 || (r.genres ?? []).some((g) => wanted.has(normalize(g)))) &&
+      matchesQuery(r, query),
+  )
   const { groups, standalone } = groupBySeries(filtered)
   const shownGroups = groups.filter((g) => seriesFilter === 'toutes' || g.state === seriesFilter)
   const shownStandalone = seriesFilter === 'toutes' ? standalone : []
@@ -171,7 +199,7 @@ export function Library() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher un titre, un auteur, une série…"
+          placeholder="Rechercher un titre, un auteur, un genre…"
           className="w-full rounded-full border border-stone-300 bg-white px-4 py-2 outline-none focus:border-accent"
         />
         <div className="flex items-center gap-2">
@@ -208,6 +236,9 @@ export function Library() {
         {activeCount > 0 && (
           <div className="flex flex-wrap gap-2">
             {type !== 'tous' && <ActivePill label={TYPE_LABELS[type]} onRemove={() => setType('tous')} />}
+            {genres.map((genre) => (
+              <ActivePill key={genre} label={genre} onRemove={() => toggleGenre(genre)} />
+            ))}
             {grouped && <ActivePill label="Par série" onRemove={() => changeGrouped(false)} />}
             {grouped && seriesFilter !== 'toutes' && (
               <ActivePill label={`Séries ${SERIES_FILTER_LABELS[seriesFilter].toLowerCase()}`} onRemove={() => setSeriesFilter('toutes')} />
@@ -311,6 +342,18 @@ export function Library() {
             </Choice>
           ))}
         </FilterSection>
+        {libraryGenres.length > 0 && (
+          <FilterSection title="Genre">
+            <Choice selected={genres.length === 0} onClick={() => setGenres([])}>
+              Tous
+            </Choice>
+            {libraryGenres.map((genre) => (
+              <Choice key={genre} selected={genres.includes(genre)} onClick={() => toggleGenre(genre)}>
+                {genre}
+              </Choice>
+            ))}
+          </FilterSection>
+        )}
         <FilterSection title="Rangement">
           <Choice selected={!grouped} onClick={() => changeGrouped(false)}>
             Par statut

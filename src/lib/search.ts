@@ -9,7 +9,7 @@ export function matchesQuery(reading: Reading, query: string): boolean {
   const words = normalize(query).split(/\s+/).filter(Boolean)
   if (words.length === 0) return true
   const haystack = normalize(
-    [reading.title, reading.series ?? '', ...reading.authors, reading.isbn ?? ''].join(' '),
+    [reading.title, reading.series ?? '', ...reading.authors, ...(reading.genres ?? []), reading.isbn ?? ''].join(' '),
   )
   return words.every((word) => haystack.includes(word))
 }
