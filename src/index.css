@@ -1,10 +1,16 @@
 @import "tailwindcss";
 
+/* Ambiance « carnet de lecture » : papier clair, sarcelle, cœurs corail. */
 @theme {
-  --color-paper: #faf7f2;
-  --color-ink: #1c1917;
-  --color-accent: #7c2d12;
-  --color-accent-soft: #ffedd5;
+  --color-paper: #f6f7f4;
+  --color-ink: #1d2a29;
+  --color-accent: #2f6f6a;
+  --color-accent-soft: #dbe9e6;
+  --color-coral: #e2725f;
+  --color-accent-dark: #1f4d4a;
+
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "DM Serif Display", Georgia, serif;
 }
 
 html,
@@ -16,4 +22,12 @@ body {
 
 body {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Planche d'étagère sur laquelle reposent les couvertures. */
+.shelf-plank {
+  height: 0.75rem;
+  border-radius: 2px;
+  background: linear-gradient(#4a8a84, var(--color-accent) 45%, var(--color-accent-dark));
+  box-shadow: 0 6px 8px -2px rgb(20 50 48 / 0.35);
 }

@@ -7,7 +7,7 @@ interface HeartRatingProps {
 // Cœur en SVG plutôt que le caractère ♥, que iOS affiche parfois en emoji rouge non stylable.
 function Heart({ filled, className }: { filled: boolean; className: string }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden className={`${className} ${filled ? 'text-rose-500' : 'text-stone-300'}`}>
+    <svg viewBox="0 0 24 24" aria-hidden className={`${className} ${filled ? 'text-coral' : 'text-stone-300'}`}>
       <path
         fill="currentColor"
         d="M12 21s-7.5-4.6-10-9.3C.3 8.4 2.1 4 6.3 4c2.3 0 3.8 1.3 4.7 2.6C11.9 5.3 13.4 4 15.7 4c4.2 0 6 4.4 4.3 7.7C19.5 16.4 12 21 12 21z"

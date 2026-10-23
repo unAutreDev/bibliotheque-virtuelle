@@ -15,6 +15,7 @@ export default defineConfig({
       workbox: {
         // Les fichiers de lecture de texte (plusieurs Mo) ne sont téléchargés qu'à la première
         // reconnaissance, puis gardés en cache pour les suivantes.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
         globIgnores: ['ocr/**'],
         runtimeCaching: [
           {
@@ -30,8 +31,8 @@ export default defineConfig({
         short_name: 'Biblio',
         description: 'Suivi de mes lectures : livres, BD et mangas',
         lang: 'fr',
-        theme_color: '#7c2d12',
-        background_color: '#faf7f2',
+        theme_color: '#f6f7f4',
+        background_color: '#f6f7f4',
         display: 'standalone',
         start_url: './',
         scope: './',
