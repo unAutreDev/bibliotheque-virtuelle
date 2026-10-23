@@ -4,11 +4,22 @@ import { Link } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
 import { HeartRating } from '../components/HeartRating'
-import { db, STATUS_LABELS, TYPE_LABELS, type Reading, type ReadingType } from '../lib/db'
+import { Shelf } from '../components/Shelf'
+import { StatsCard } from '../components/StatsCard'
+import { db, STATUS_LABELS, TYPE_LABELS, type Reading, type ReadingStatus, type ReadingType } from '../lib/db'
 import { matchesQuery } from '../lib/search'
 import { groupBySeries, SERIES_STATE_LABELS, type SeriesGroup, type SeriesState } from '../lib/series'
 
 type View = 'grille' | 'liste'
+
+// Ordre des étagères quand les lectures sont rangées par statut.
+const SHELF_ORDER: ReadingStatus[] = ['en_cours', 'a_lire', 'lu', 'abandonne']
+const SHELF_TITLES: Record<ReadingStatus, string> = {
+  en_cours: 'En cours',
+  a_lire: 'À lire',
+  lu: 'Lus',
+  abandonne: 'Abandonnés',
+}
 
 function loadGrouped(): boolean {
   try {
@@ -76,20 +87,18 @@ export function Library() {
 
   const renderReadings = (list: Reading[]) =>
     view === 'grille' ? (
-      <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
-        {list.map((r) => (
-          <li key={r.id}>
-            <Link to={`/lecture/${r.id}`} className="block">
-              <Cover url={r.coverUrl} title={r.title} type={r.type} />
-              <p className="mt-1 line-clamp-2 text-xs leading-tight font-medium">
-                {grouped && r.volume ? `T${r.volume} · ` : ''}
-                {r.title}
-              </p>
-              <HeartRating value={r.rating} />
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <Shelf
+        readings={list}
+        label={(r) => (
+          <>
+            <p className="line-clamp-2 text-xs leading-tight font-medium">
+              {grouped && r.volume ? `T${r.volume} · ` : ''}
+              {r.title}
+            </p>
+            <HeartRating value={r.rating} />
+          </>
+        )}
+      />
     ) : (
       <ul className="divide-y divide-stone-200">
         {list.map((r) => (
@@ -181,6 +190,11 @@ export function Library() {
       </div>
 
       <main className="px-4 pt-2">
+        {readings && readings.length > 0 && !query && (
+          <div className="mb-6">
+            <StatsCard readings={readings} />
+          </div>
+        )}
         {readings && readings.length === 0 && (
           <div className="mt-16 text-center text-stone-500">
             <p className="text-5xl">📚</p>
@@ -194,12 +208,30 @@ export function Library() {
           <p className="mt-12 text-center text-stone-500">Aucune lecture ne correspond à ta recherche.</p>
         )}
 
-        {!grouped && renderReadings(filtered)}
+        {!grouped && view === 'liste' && renderReadings(filtered)}
+
+        {!grouped && view === 'grille' && (
+          <div className="space-y-6">
+            {SHELF_ORDER.map((status) => {
+              const onShelf = filtered.filter((r) => r.status === status)
+              if (onShelf.length === 0) return null
+              return (
+                <section key={status}>
+                  <h2 className="mb-2 flex items-baseline gap-2 font-display text-lg">
+                    {SHELF_TITLES[status]}
+                    <span className="font-sans text-xs text-stone-500 tabular-nums">{onShelf.length}</span>
+                  </h2>
+                  {renderReadings(onShelf)}
+                </section>
+              )
+            })}
+          </div>
+        )}
 
         {grouped && (
           <div className="space-y-2">
             {shownGroups.map((group) => (
-              <details key={group.key} className="rounded-lg border border-stone-200 bg-white">
+              <details key={group.key} className="rounded-2xl bg-white shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center gap-3 p-2">
                   <div className="w-10 shrink-0">
                     <Cover url={group.readings[0].coverUrl} title={group.name} type={group.readings[0].type} />

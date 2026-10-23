@@ -19,6 +19,8 @@ export interface Reading {
   status: ReadingStatus
   rating?: number
   comment?: string
+  /** Date à laquelle la lecture est passée à « Lu » (pour les statistiques). */
+  finishedAt?: string
   addedAt: string
   updatedAt: string
 }
@@ -75,13 +77,27 @@ export function setLocalChangeListener(listener: () => void) {
 
 export async function addReading(draft: ReadingDraft): Promise<number> {
   const now = new Date().toISOString()
-  const id = await db.readings.add({ ...draft, uid: crypto.randomUUID(), addedAt: now, updatedAt: now } as Reading)
+  const finishedAt = draft.status === 'lu' ? now : undefined
+  const id = await db.readings.add({
+    ...draft,
+    uid: crypto.randomUUID(),
+    finishedAt,
+    addedAt: now,
+    updatedAt: now,
+  } as Reading)
   onLocalChange()
   return id
 }
 
 export async function updateReading(id: number, changes: Partial<ReadingDraft>) {
-  await db.readings.update(id, { ...changes, updatedAt: new Date().toISOString() })
+  const now = new Date().toISOString()
+  const update: Partial<Reading> = { ...changes, updatedAt: now }
+  if (changes.status) {
+    const current = await db.readings.get(id)
+    if (changes.status !== 'lu') update.finishedAt = undefined
+    else if (current?.status !== 'lu') update.finishedAt = now
+  }
+  await db.readings.update(id, update)
   onLocalChange()
 }
 
