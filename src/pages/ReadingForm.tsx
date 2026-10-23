@@ -59,6 +59,11 @@ function ReadingForm({ existing }: { existing?: Reading }) {
     setCoverSearch('idle')
   }
 
+  const prefill = (fields: Partial<ReadingDraft>) => {
+    setDraft((d) => ({ ...d, ...fields }))
+    if (fields.authors) setAuthorsText(fields.authors.join(', '))
+  }
+
   const searchCover = async () => {
     setCoverSearch('loading')
     const authors = authorsText.split(',').map((a) => a.trim()).filter(Boolean)
@@ -120,7 +125,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
             </button>
           ))}
         </div>
-        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} onCoverPhoto={(cover) => set('coverUrl', cover)} />}
+        {!existing && <OnlineSearch type={draft.type} onPick={pickResult} onPrefill={prefill} onCoverPhoto={(cover) => set('coverUrl', cover)} />}
       </div>
       <form onSubmit={submit} className="mx-auto max-w-xl space-y-4 p-4">
         <Field label="Titre *">

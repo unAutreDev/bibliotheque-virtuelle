@@ -1,12 +1,14 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { searchBooks, type BookResult } from '../lib/bookSearch'
-import type { ReadingType } from '../lib/db'
+import { guessVolume, searchBooks, similarity, splitSeries, type BookResult } from '../lib/bookSearch'
+import type { ReadingDraft, ReadingType } from '../lib/db'
 import { photoToCover } from '../lib/image'
-import { readCoverTitle, readIsbn } from '../lib/recognize'
+import { readCoverText, readIsbn } from '../lib/recognize'
 
 interface OnlineSearchProps {
   type: ReadingType
   onPick: (result: BookResult) => Promise<void>
+  /** Champs lus directement sur la photo, appliqués avant même la recherche en ligne. */
+  onPrefill: (fields: Partial<ReadingDraft>) => void
   /** Photo de la couverture reconnue, à garder comme couverture de la lecture. */
   onCoverPhoto: (dataUrl: string) => void
 }
@@ -15,18 +17,31 @@ type Recognition = { step: 'idle' } | { step: 'barcode' } | { step: 'text'; prog
 
 type State = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done'; results: BookResult[]; failed: boolean }
 
+/** Seuil à partir duquel un résultat est assez proche du titre lu pour remplir la fiche sans demander. */
+const AUTO_PICK_SIMILARITY = 0.6
+
+/** « ASTÉRIX LE GAULOIS » → « Astérix le gaulois » : l'OCR rend souvent les titres en capitales. */
+function tidyTitle(text: string): string {
+  if (text !== text.toUpperCase()) return text
+  const lower = text.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
+
 /** Recherche en ligne : l'utilisateur tape un titre, un auteur ou un ISBN et choisit le bon résultat. */
-export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) {
+export function OnlineSearch({ type, onPick, onPrefill, onCoverPhoto }: OnlineSearchProps) {
   const [query, setQuery] = useState('')
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [picking, setPicking] = useState<string>()
+  const [autoPicked, setAutoPicked] = useState<BookResult>()
   const [recognition, setRecognition] = useState<Recognition>({ step: 'idle' })
 
-  const runSearch = async (text: string) => {
-    if (!text.trim()) return
+  const runSearch = async (text: string): Promise<BookResult[]> => {
+    if (!text.trim()) return []
+    setAutoPicked(undefined)
     setState({ kind: 'loading' })
     const { results, failed } = await searchBooks(text.trim(), type)
     setState({ kind: 'done', results, failed })
+    return results
   }
 
   const search = (event: FormEvent) => {
@@ -34,30 +49,43 @@ export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) 
     void runSearch(query)
   }
 
+  /** Remplit la fiche avec un résultat sûr, en laissant la liste visible pour corriger si besoin. */
+  const autoPick = async (result: BookResult) => {
+    setPicking(result.id)
+    await onPick(result)
+    setPicking(undefined)
+    setAutoPicked(result)
+  }
+
   /**
    * Reconnaissance depuis une photo : d'abord le code-barres (4e de couverture, le plus fiable),
-   * sinon le titre écrit sur la couverture, puis lancement de la recherche en ligne.
+   * sinon le texte de la couverture. Ce qui est lu remplit la fiche tout de suite, puis la
+   * recherche en ligne complète le reste quand un résultat correspond clairement.
    */
   const recognizePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     setState({ kind: 'idle' })
+    setAutoPicked(undefined)
     try {
       setRecognition({ step: 'barcode' })
       const isbn = await readIsbn(file).catch(() => undefined)
       if (isbn) {
         setRecognition({ step: 'idle' })
+        onPrefill({ isbn })
         setQuery(isbn)
-        await runSearch(isbn)
+        const results = await runSearch(isbn)
+        const match = results.find((r) => r.isbn?.replace(/-/g, '') === isbn) ?? (results.length === 1 ? results[0] : undefined)
+        if (match) await autoPick(match)
         return
       }
 
-      // Pas de code-barres : c'est sans doute la couverture, on la garde et on lit le titre.
+      // Pas de code-barres : c'est sans doute la couverture, on la garde et on lit le texte.
       const cover = await photoToCover(file)
       onCoverPhoto(cover)
       setRecognition({ step: 'text', progress: 0 })
-      const title = await readCoverTitle(cover, (progress) => setRecognition({ step: 'text', progress }))
+      const { title, fullText } = await readCoverText(cover, (progress) => setRecognition({ step: 'text', progress }))
       if (!title) {
         setRecognition({
           step: 'failed',
@@ -66,8 +94,15 @@ export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) 
         return
       }
       setRecognition({ step: 'idle' })
+      const split = splitSeries(tidyTitle(title))
+      const volume = split.volume ?? guessVolume(fullText)
+      onPrefill({ title: split.title, ...(split.series && { series: split.series }), ...(volume !== undefined && { volume }) })
       setQuery(title)
-      await runSearch(title)
+      const results = await runSearch(title)
+      const best = results
+        .map((result) => ({ result, score: similarity(result.title, title) }))
+        .sort((a, b) => b.score - a.score)[0]
+      if (best && best.score >= AUTO_PICK_SIMILARITY) await autoPick(best.result)
     } catch {
       setRecognition({ step: 'failed', message: "La reconnaissance n'a pas fonctionné. Réessaie avec une photo plus nette, ou tape le titre." })
     }
@@ -79,6 +114,7 @@ export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) 
     setPicking(result.id)
     await onPick(result)
     setPicking(undefined)
+    setAutoPicked(undefined)
     setState({ kind: 'idle' })
   }
 
@@ -127,6 +163,12 @@ export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) 
         fiche, ou remplis-la à la main ci-dessous.
       </p>
 
+      {autoPicked && (
+        <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900" role="status">
+          ✓ Fiche remplie avec « {autoPicked.title} » ({autoPicked.source}). Vérifie-la ci-dessous ; si ce n'est pas le bon
+          livre, choisis un autre résultat.
+        </p>
+      )}
       {state.kind === 'done' && state.failed && (
         <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           La recherche en ligne n'a pas répondu. Vérifie ta connexion, ou remplis la fiche à la main.
@@ -143,7 +185,7 @@ export function OnlineSearch({ type, onPick, onCoverPhoto }: OnlineSearchProps) 
                 type="button"
                 disabled={picking !== undefined}
                 onClick={() => pick(result)}
-                className="flex w-full gap-3 py-2 text-left active:bg-stone-50 disabled:opacity-60"
+                className={`flex w-full gap-3 rounded-lg py-2 text-left active:bg-stone-50 disabled:opacity-60 ${autoPicked?.id === result.id ? 'bg-emerald-50 px-2 ring-1 ring-emerald-200' : ''}`}
               >
                 <div className="flex aspect-[2/3] w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-stone-100 text-lg">
                   {result.coverUrl ? (

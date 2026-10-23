@@ -13,6 +13,7 @@ export interface BookResult {
   summary?: string
   isbn?: string
   coverUrl?: string
+  series?: string
   volume?: number
   /** Résumé à charger seulement si le résultat est choisi (Open Library). */
   loadSummary?: () => Promise<string | undefined>
@@ -48,8 +49,34 @@ function stripHtml(text?: string): string | undefined {
 
 /** « Astérix, tome 4 », « One Piece T.12 », « Naruto Vol. 3 » → numéro de tome. */
 export function guessVolume(title: string): number | undefined {
-  const match = title.match(/(?:\btome|\bt\.|\bvol(?:ume)?\.?|\bn°|#)\s*(\d{1,4})\b/i)
+  const match = title.match(/(?:\b(?:tome|t\.|vol(?:ume)?\.?|n°)|#)\s*(\d{1,4})\b/i)
   return match ? Number(match[1]) : undefined
+}
+
+/**
+ * Sépare série, tome et titre propre :
+ * « Astérix, tome 4 : Astérix gladiateur » → série « Astérix », tome 4, titre « Astérix gladiateur ».
+ * Sans titre après le tome (« One Piece - Tome 12 »), le titre complet est gardé.
+ */
+export function splitSeries(fullTitle: string): { title: string; series?: string; volume?: number } {
+  const match = fullTitle.match(
+    /^(.+?)[\s,:\-–—(]*(?:\b(?:tome|t\.|vol(?:ume)?\.?|n°)|#)\s*(\d{1,4})\)?(?:\s*[-–—:,.]\s*(.+))?$/i,
+  )
+  if (!match) return { title: fullTitle }
+  const [, series, volume, rest] = match
+  return { title: rest?.trim() || fullTitle, series: series.trim(), volume: Number(volume) }
+}
+
+/**
+ * Mots communs rapportés au texte le plus long (0 à 1), pour juger un résultat :
+ * « Astérix » seul ne correspond qu'à un tiers de « Astérix le Gaulois ».
+ */
+export function similarity(a: string, b: string): number {
+  const words = (text: string) => new Set(normalize(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 2))
+  const [wa, wb] = [words(a), words(b)]
+  if (wa.size === 0 || wb.size === 0) return 0
+  const [small, large] = wa.size <= wb.size ? [wa, wb] : [wb, wa]
+  return [...small].filter((w) => large.has(w)).length / large.size
 }
 
 // --- Google Books -----------------------------------------------------------
@@ -171,6 +198,7 @@ async function searchAniList(query: string): Promise<BookResult[]> {
       source: 'AniList' as const,
       title: m.title.english ?? m.title.romaji ?? m.title.native ?? 'Sans titre',
       authors: [...new Set(authors)],
+      series: m.title.english ?? m.title.romaji ?? undefined,
       publishedDate: date,
       summary: stripHtml(m.description),
       coverUrl: m.coverImage?.extraLarge ?? m.coverImage?.large,
@@ -220,12 +248,16 @@ export async function resultToDraft(result: BookResult): Promise<Partial<Reading
   if (!summary && result.loadSummary) summary = await result.loadSummary().catch(() => undefined)
   const coverUrl =
     result.coverUrl ?? (result.isbn ? `https://covers.openlibrary.org/b/isbn/${result.isbn}-L.jpg?default=false` : undefined)
-  const draft: Partial<ReadingDraft> = { title: result.title, authors: result.authors }
+  const split = splitSeries(result.title)
+  const draft: Partial<ReadingDraft> = { title: split.title, authors: result.authors }
+  const series = result.series ?? split.series
+  if (series) draft.series = series
   if (result.publishedDate) draft.publishedDate = result.publishedDate
   if (summary) draft.summary = summary
   if (result.isbn) draft.isbn = result.isbn
   if (coverUrl) draft.coverUrl = coverUrl
-  if (result.volume !== undefined) draft.volume = result.volume
+  const volume = result.volume ?? split.volume
+  if (volume !== undefined) draft.volume = volume
   return draft
 }
 

@@ -30,10 +30,13 @@ function cleanLine(line: Line): string {
 }
 
 /**
- * Lit le titre sur une photo de couverture. Sur une couverture, le titre est en général
- * le texte le plus grand : on garde les lignes lisibles les plus hautes.
+ * Lit le texte d'une photo de couverture. Le titre est en général le texte le plus grand :
+ * on garde les lignes lisibles les plus hautes. Le texte complet sert à repérer le tome.
  */
-export async function readCoverTitle(photo: Blob | string, onProgress?: (progress: number) => void): Promise<string | undefined> {
+export async function readCoverText(
+  photo: Blob | string,
+  onProgress?: (progress: number) => void,
+): Promise<{ title?: string; fullText: string }> {
   const { createWorker, OEM, PSM } = await import('tesseract.js')
   const base = new URL('ocr/', document.baseURI).href
   const worker = await createWorker('fra', OEM.LSTM_ONLY, {
@@ -50,7 +53,8 @@ export async function readCoverTitle(photo: Blob | string, onProgress?: (progres
       .flatMap((block) => block.paragraphs.flatMap((paragraph) => paragraph.lines))
       .map((line) => ({ line, text: cleanLine(line) }))
       .filter(({ text }) => (text.match(/\p{L}/gu)?.length ?? 0) >= 3)
-    if (lines.length === 0) return undefined
+    const fullText = lines.map(({ text }) => text).join('\n')
+    if (lines.length === 0) return { fullText }
 
     const tallest = Math.max(...lines.map(({ line }) => lineHeight(line)))
     const title = lines
@@ -61,7 +65,7 @@ export async function readCoverTitle(photo: Blob | string, onProgress?: (progres
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim()
-    return title || undefined
+    return { title: title || undefined, fullText }
   } finally {
     await worker.terminate()
   }
