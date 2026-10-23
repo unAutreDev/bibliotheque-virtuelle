@@ -1,14 +1,13 @@
 @import "tailwindcss";
 
-/* Ambiance « carnet de lecture » : papier clair, sarcelle, cœurs corail et étagères en bois. */
+/* Ambiance « carnet de lecture » : papier clair, sarcelle, cœurs corail. */
 @theme {
   --color-paper: #f6f7f4;
   --color-ink: #1d2a29;
   --color-accent: #2f6f6a;
   --color-accent-soft: #dbe9e6;
   --color-coral: #e2725f;
-  --color-wood: #a8743f;
-  --color-wood-dark: #6e4724;
+  --color-accent-dark: #1f4d4a;
 
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "DM Serif Display", Georgia, serif;
@@ -29,6 +28,6 @@ body {
 .shelf-plank {
   height: 0.75rem;
   border-radius: 2px;
-  background: linear-gradient(#c08a52, var(--color-wood) 45%, var(--color-wood-dark));
-  box-shadow: 0 6px 8px -2px rgb(70 40 15 / 0.35);
+  background: linear-gradient(#4a8a84, var(--color-accent) 45%, var(--color-accent-dark));
+  box-shadow: 0 6px 8px -2px rgb(20 50 48 / 0.35);
 }

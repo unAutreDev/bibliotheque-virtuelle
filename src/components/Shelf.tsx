@@ -29,7 +29,7 @@ interface ShelfProps {
   label: (reading: Reading) => ReactNode
 }
 
-/** Les couvertures debout sur des planches en bois, une planche par rangée, l'étiquette sous la planche. */
+/** Les couvertures debout sur des planches, une planche par rangée, l'étiquette sous la planche. */
 export function Shelf({ readings, label }: ShelfProps) {
   const columns = useColumns()
   const rows: Reading[][] = []
