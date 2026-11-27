@@ -4,6 +4,7 @@ import { Cover } from '../components/Cover'
 import { Header } from '../components/Header'
 import { HeartRating } from '../components/HeartRating'
 import { photoToCover } from '../lib/image'
+import { nextVolumeLink } from '../lib/series'
 import { db, deleteReading, STATUS_LABELS, TYPE_LABELS, updateReading, type ReadingStatus } from '../lib/db'
 
 export function ReadingDetail() {
@@ -71,6 +72,11 @@ export function ReadingDetail() {
                 {reading.series}
                 {reading.volume !== undefined && ` · Tome ${reading.volume}`}
               </p>
+            )}
+            {reading.series && (
+              <Link to={nextVolumeLink(reading.series)} className="inline-block text-sm text-accent underline underline-offset-2">
+                + Ajouter le tome suivant
+              </Link>
             )}
             {reading.genres && reading.genres.length > 0 && (
               <ul className="flex flex-wrap gap-1 pt-1" aria-label="Genres">

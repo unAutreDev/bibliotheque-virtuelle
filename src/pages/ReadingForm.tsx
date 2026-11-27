@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Cover } from '../components/Cover'
 import { GenreField } from '../components/GenreField'
 import { Header } from '../components/Header'
@@ -21,16 +21,21 @@ import {
 import { findCover, resultToDraft, searchBooks, type BookResult } from '../lib/bookSearch'
 import { isPhoto, photoToCover } from '../lib/image'
 import { readIsbn } from '../lib/recognize'
+import { normalize } from '../lib/search'
+import { seriesNames, seriesTemplate } from '../lib/series'
 import { buildSuggestions } from '../lib/suggestions'
 
 const EMPTY: ReadingDraft = { type: 'livre', title: '', authors: [], status: 'a_lire' }
 
 export function ReadingFormPage() {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const existing = useLiveQuery(() => (id ? db.readings.get(Number(id)) : undefined), [id])
+  // « Ajouter le tome suivant » ouvre le formulaire avec ?serie=… : le reste est repris de la série.
+  const series = id ? undefined : params.get('serie')?.trim() || undefined
 
   if (id && !existing) return null
-  return <ReadingForm key={existing?.id ?? 'new'} existing={existing} />
+  return <ReadingForm key={existing?.id ?? `new-${series ?? ''}`} existing={existing} initialSeries={series} />
 }
 
 function Field({ label, children, suggestions }: { label: string; children: ReactNode; suggestions?: ReactNode }) {
@@ -47,10 +52,43 @@ function Field({ label, children, suggestions }: { label: string; children: Reac
 
 const inputClass = 'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 outline-none focus:border-accent'
 
-function ReadingForm({ existing }: { existing?: Reading }) {
+function ReadingForm({ existing, initialSeries }: { existing?: Reading; initialSeries?: string }) {
   const navigate = useNavigate()
-  const [draft, setDraft] = useState<ReadingDraft>(existing ?? EMPTY)
+  const [draft, setDraft] = useState<ReadingDraft>(existing ?? { ...EMPTY, series: initialSeries })
   const [authorsText, setAuthorsText] = useState(existing?.authors.join(', ') ?? '')
+
+  const library = useLiveQuery(() => db.readings.toArray(), [])
+  const knownSeries = useMemo(() => seriesNames(library ?? []), [library])
+  /** Série dont les champs communs ont déjà été repris, pour ne pas réécraser ce que l'utilisateur corrige. */
+  const [appliedSeries, setAppliedSeries] = useState<string>()
+  const [seriesNote, setSeriesNote] = useState<string>()
+
+  // Nouveau tome d'une série déjà dans la bibliothèque : on reprend type, auteurs, genres et
+  // numéro du tome suivant, seulement dans les champs encore vides. Quelle que soit l'origine
+  // du nom de série (saisie, recherche en ligne, photo ou lien « tome suivant »).
+  useEffect(() => {
+    if (existing || !library) return
+    const key = normalize(draft.series ?? '')
+    if (!key || key === appliedSeries) return
+    const template = seriesTemplate(library, key)
+    if (!template) return
+    setAppliedSeries(key)
+    const filled: string[] = []
+    if (authorsText.trim() === '' && template.authors.length) {
+      setAuthorsText(template.authors.join(', '))
+      filled.push('auteurs')
+    }
+    setDraft((d) => {
+      const next = { ...d, type: template.type }
+      if (!d.genres?.length && template.genres?.length) next.genres = template.genres
+      if (d.volume === undefined && template.nextVolume !== undefined) next.volume = template.nextVolume
+      return next
+    })
+    if (!draft.genres?.length && template.genres?.length) filled.push('genres')
+    if (draft.volume === undefined && template.nextVolume !== undefined) filled.push(`tome ${template.nextVolume}`)
+    filled.push(`type ${TYPE_LABELS[template.type]}`)
+    setSeriesNote(`Repris de « ${template.series} » : ${filled.join(', ')}.`)
+  }, [existing, library, draft.series, draft.genres, draft.volume, appliedSeries, authorsText])
 
   const [photoState, setPhotoState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [coverSearch, setCoverSearch] = useState<'idle' | 'loading' | 'notFound'>('idle')
@@ -164,7 +202,7 @@ function ReadingForm({ existing }: { existing?: Reading }) {
 
   return (
     <div className="min-h-dvh pb-10">
-      <Header title={existing ? 'Modifier' : 'Ajouter une lecture'} back={existing ? `/lecture/${existing.id}` : '/'} />
+      <Header title={existing ? 'Modifier' : initialSeries ? 'Ajouter un tome' : 'Ajouter une lecture'} back={existing ? `/lecture/${existing.id}` : '/'} />
       {/* Hors du formulaire principal : un <form> imbriqué n'est pas valide en HTML. */}
       <div className="mx-auto max-w-xl space-y-4 px-4 pt-4">
         <div className="flex gap-2">
@@ -224,8 +262,19 @@ function ReadingForm({ existing }: { existing?: Reading }) {
               label="Série"
               suggestions={<SuggestionChips values={suggestions.series} current={[draft.series ?? '']} onPick={(v) => set('series', v)} />}
             >
-              <input value={draft.series ?? ''} onChange={(e) => set('series', e.target.value)} className={inputClass} />
+              <input
+                value={draft.series ?? ''}
+                onChange={(e) => set('series', e.target.value)}
+                list="series-connues"
+                autoComplete="off"
+                className={inputClass}
+              />
             </Field>
+            <datalist id="series-connues">
+              {knownSeries.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
           </div>
           <div className="w-24">
             <Field
@@ -245,6 +294,12 @@ function ReadingForm({ existing }: { existing?: Reading }) {
             </Field>
           </div>
         </div>
+
+        {seriesNote && (
+          <p className="-mt-2 rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent" role="status">
+            {seriesNote}
+          </p>
+        )}
 
         <Field
           label="Auteur(s), séparés par des virgules"

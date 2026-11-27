@@ -9,7 +9,7 @@ import { Shelf } from '../components/Shelf'
 import { StatsCard } from '../components/StatsCard'
 import { db, STATUS_LABELS, TYPE_LABELS, type Reading, type ReadingStatus, type ReadingType } from '../lib/db'
 import { matchesQuery, normalize } from '../lib/search'
-import { groupBySeries, SERIES_STATE_LABELS, type SeriesGroup, type SeriesState } from '../lib/series'
+import { groupBySeries, nextVolumeLink, SERIES_STATE_LABELS, type SeriesGroup, type SeriesState } from '../lib/series'
 
 type View = 'grille' | 'liste'
 
@@ -310,7 +310,15 @@ export function Library() {
                   </div>
                   <SeriesBadge group={group} />
                 </summary>
-                <div className="border-t border-stone-200 p-2">{renderReadings(group.readings)}</div>
+                <div className="border-t border-stone-200 p-2">
+                  {renderReadings(group.readings)}
+                  <Link
+                    to={nextVolumeLink(group.name)}
+                    className="mt-2 flex items-center justify-center gap-1 rounded-full border border-accent py-2 text-sm text-accent active:scale-[0.98]"
+                  >
+                    <span aria-hidden>＋</span> Ajouter le tome suivant
+                  </Link>
+                </div>
               </details>
             ))}
             {shownStandalone.length > 0 && (
